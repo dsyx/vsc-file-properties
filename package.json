@@ -3,7 +3,7 @@
   "displayName": "File Properties",
   "description": "A VSCode extension for conveniently displaying file properties.",
   "icon": "resources/icons/logo.png",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "publisher": "dsyx",
   "license": "MIT",
   "repository": {
@@ -26,6 +26,11 @@
       "title": "File Properties",
       "type": "object",
       "properties": {
+        "file-properties.statusBarAlignment": {
+          "type": "string",
+          "default": "Right",
+          "description": "Status bar alignment, 'Left' or 'Right'."
+        },
         "file-properties.showPermissionsInStatusBar": {
           "type": "boolean",
           "default": true,

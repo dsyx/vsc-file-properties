@@ -13,6 +13,7 @@ A VSCode extension for conveniently displaying file properties.
 
 ## Extension Settings
 
+- `file-properties.statusBarAlignment`: Status bar alignment, 'Left' or 'Right'.
 - `file-properties.showPermissionsInStatusBar`: Show file permissions in status bar.
 - `file-properties.showSizeInStatusBar`: Show file size in status bar.
 - `file-properties.showMtimeInStatusBar`: Show file last modified date in status bar.
