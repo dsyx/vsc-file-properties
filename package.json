@@ -2,6 +2,7 @@
   "name": "file-properties",
   "displayName": "File Properties",
   "description": "A VSCode extension for conveniently displaying file properties.",
+  "icon": "resources/icons/logo.png",
   "version": "0.9.0",
   "publisher": "dsyx",
   "license": "MIT",
