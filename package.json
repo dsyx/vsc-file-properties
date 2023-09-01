@@ -3,7 +3,7 @@
   "displayName": "File Properties",
   "description": "A VSCode extension for conveniently displaying file properties.",
   "icon": "resources/icons/logo.png",
-  "version": "0.9.1",
+  "version": "0.10.0",
   "publisher": "dsyx",
   "license": "MIT",
   "repository": {
@@ -41,7 +41,7 @@
           "default": true,
           "description": "Show file size in status bar."
         },
-        "file-properties.showMtimeInStatusBar": {
+        "file-properties.showMTimeInStatusBar": {
           "type": "boolean",
           "default": true,
           "description": "Show file last modified date in status bar."

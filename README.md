@@ -16,7 +16,7 @@ A VSCode extension for conveniently displaying file properties.
 - `file-properties.statusBarAlignment`: Status bar alignment, 'Left' or 'Right'.
 - `file-properties.showPermissionsInStatusBar`: Show file permissions in status bar.
 - `file-properties.showSizeInStatusBar`: Show file size in status bar.
-- `file-properties.showMtimeInStatusBar`: Show file last modified date in status bar.
+- `file-properties.showMTimeInStatusBar`: Show file last modified date in status bar.
 - `file-properties.useSiSizeUnit`: Use the size unit defined in SI (1 KB = 1000 B) instead of the definition in the IEC standard (1 KiB = 1024 B).
 - `file-properties.dateFormat`: For the format of all dates, see: https://moment.github.io/luxon/#/formatting?id=table-of-tokens.
 
