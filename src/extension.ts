@@ -1,35 +1,40 @@
 import * as vscode from "vscode";
-import * as fs from "fs";
-import * as util from "util";
-import * as luxon from "luxon";
+import * as cfg from "./configuration";
+import * as fs from "./fileStat";
+import { StatusBarAlignment, StatusBarItem } from "./statusBar";
 
-const stat = util.promisify(fs.stat);
+const configurationManager = cfg.ConfigurationManager.getConfigurationManager();
+const outputChannel = vscode.window.createOutputChannel("File Properties");
 
-let outputChannel: vscode.OutputChannel;
-let viewDetailCommand: vscode.Disposable;
-let statusBar: vscode.StatusBarItem;
-let leftStatusBar: vscode.StatusBarItem;
-let rightStatusBar: vscode.StatusBarItem;
+let statusBarItem: StatusBarItem;
 
-interface Configuration {
-	statusBarAlignment: "Left" | "Right";
-	showPermissionsInStatusBar: boolean;
-	showSizeInStatusBar: boolean;
-	showMtimeInStatusBar: boolean;
-	useSiSizeUnit: boolean;
-	dateFormat: string;
+async function viewDetailCommandHandler() {
+	try {
+		const path = getActiveFilePath();
+		const stat = new fs.FileStat(path);
+
+		outputChannel.appendLine(``.padEnd(80, "*"));
+		outputChannel.appendLine(`path:      ${path}`);
+		outputChannel.appendLine(`dev:       ${stat.dev}`);
+		outputChannel.appendLine(`ino:       ${stat.ino}`);
+		outputChannel.appendLine(`mode:      ${stat.mode}`);
+		outputChannel.appendLine(`nlink:     ${stat.nlink}`);
+		outputChannel.appendLine(`uid:       ${stat.uid}`);
+		outputChannel.appendLine(`gid:       ${stat.gid}`);
+		outputChannel.appendLine(`rdev:      ${stat.rdev}`);
+		outputChannel.appendLine(`size:      ${stat.size}`);
+		outputChannel.appendLine(`blksize:   ${stat.blksize}`);
+		outputChannel.appendLine(`blocks:    ${stat.blocks}`);
+		outputChannel.appendLine(`atime:     ${stat.atime}`);
+		outputChannel.appendLine(`mtime:     ${stat.mtime}`);
+		outputChannel.appendLine(`ctime:     ${stat.ctime}`);
+		outputChannel.appendLine(`birthtime: ${stat.birthtime}`);
+		outputChannel.appendLine(``.padEnd(80, "*"));
+		outputChannel.show();
+	} catch (error) {
+		handleError(error);
+	}
 }
-
-const defaultConfigurations: Configuration = {
-	statusBarAlignment: "Right",
-	showPermissionsInStatusBar: true,
-	showSizeInStatusBar: true,
-	showMtimeInStatusBar: true,
-	useSiSizeUnit: false,
-	dateFormat: "yyyy-MM-dd HH:mm:ss",
-};
-
-let configurations: Configuration = { ...defaultConfigurations };
 
 class ActiveEditorUndefinedError extends Error {
 	constructor() {
@@ -45,51 +50,31 @@ class ActiveEditorDocumentNotFileError extends Error {
 	}
 }
 
-function formatPermissions(mode: number): string {
-	const permissions = [
-		(mode & 0o0400 ? "r" : "-"),
-		(mode & 0o0200 ? "w" : "-"),
-		(mode & 0o0100 ? "x" : "-"),
-		(mode & 0o0040 ? "r" : "-"),
-		(mode & 0o0020 ? "w" : "-"),
-		(mode & 0o0010 ? "x" : "-"),
-		(mode & 0o0004 ? "r" : "-"),
-		(mode & 0o0002 ? "w" : "-"),
-		(mode & 0o0001 ? "x" : "-"),
-	];
-
-	return permissions.join("");
-}
-
-function formatSize(size: number, useSiSizeUnit: boolean): string {
-	const definition = useSiSizeUnit
-		? { units: ["B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"], kilo: 1000 }
-		: { units: ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"], kilo: 1024 };
-
-	let index = 0;
-	while (size >= definition.kilo && index < definition.units.length - 1) {
-		size /= definition.kilo;
-		index++;
+function handleError(error: any) {
+	if (error instanceof ActiveEditorUndefinedError) {
+		statusBarItem.hide();
+	} else if (error instanceof ActiveEditorDocumentNotFileError) {
+		statusBarItem.hide();
+	} else if (error instanceof Error) {
+		outputChannel.appendLine(error.message);
+		outputChannel.show();
+	} else {
+		outputChannel.appendLine("An unknown error occurred");
+		outputChannel.show();
 	}
-
-	return `${size.toFixed(2)} ${definition.units[index]}`;
 }
 
-function formatDate(date: Date, format: string): string {
-	return luxon.DateTime.fromJSDate(date).toFormat(format);
-}
-
-function formatStats(stats: fs.Stats, configurations: Configuration): string {
+function formatStatusBarText(stat: fs.FileStat, cfg: cfg.Configuration): string {
 	const properties = [];
 
-	if (configurations.showPermissionsInStatusBar) {
-		properties.push(formatPermissions(stats.mode));
+	if (cfg.showPermissionsInStatusBar) {
+		properties.push(stat.formattedPermissions());
 	}
-	if (configurations.showSizeInStatusBar) {
-		properties.push(formatSize(stats.size, configurations.useSiSizeUnit));
+	if (cfg.showSizeInStatusBar) {
+		properties.push(stat.formattedSize(cfg.useSiSizeUnit ? fs.FileSizeUnit.si : fs.FileSizeUnit.iec));
 	}
-	if (configurations.showMtimeInStatusBar) {
-		properties.push(formatDate(stats.mtime, configurations.dateFormat));
+	if (cfg.showMtimeInStatusBar) {
+		properties.push(stat.formattedMTime(cfg.dateFormat));
 	}
 
 	return `[${properties.join(" | ")}]`;
@@ -107,115 +92,34 @@ function getActiveFilePath(): string {
 	return uri.fsPath;
 }
 
-async function getActiveFileStats(): Promise<fs.Stats> {
-	const path = getActiveFilePath();
-	return stat(path);
-}
-
-function handleError(error: any) {
-	if (error instanceof ActiveEditorUndefinedError) {
-		statusBar.hide();
-	} else if (error instanceof ActiveEditorDocumentNotFileError) {
-		statusBar.hide();
-	} else if (error instanceof Error) {
-		outputChannel.appendLine(error.message);
-		outputChannel.show();
-	} else {
-		outputChannel.appendLine("An unknown error occurred");
-		outputChannel.show();
-	}
-}
-
-async function viewDetailCommandHandler() {
+async function updateAndShowStatusBarText() {
 	try {
 		const path = getActiveFilePath();
-		const stats = await getActiveFileStats();
+		const stat = new fs.FileStat(path);
+		const text = formatStatusBarText(stat, configurationManager.configuration);
 
-		outputChannel.appendLine(``.padEnd(80, "*"));
-		outputChannel.appendLine(`path:      ${path}`);
-		outputChannel.appendLine(`dev:       ${stats.dev}`);
-		outputChannel.appendLine(`ino:       ${stats.ino}`);
-		outputChannel.appendLine(`mode:      ${stats.mode}`);
-		outputChannel.appendLine(`nlink:     ${stats.nlink}`);
-		outputChannel.appendLine(`uid:       ${stats.uid}`);
-		outputChannel.appendLine(`gid:       ${stats.gid}`);
-		outputChannel.appendLine(`rdev:      ${stats.rdev}`);
-		outputChannel.appendLine(`size:      ${stats.size}`);
-		outputChannel.appendLine(`blksize:   ${stats.blksize}`);
-		outputChannel.appendLine(`blocks:    ${stats.blocks}`);
-		outputChannel.appendLine(`atime:     ${stats.atime}`);
-		outputChannel.appendLine(`mtime:     ${stats.mtime}`);
-		outputChannel.appendLine(`ctime:     ${stats.ctime}`);
-		outputChannel.appendLine(`birthtime: ${stats.birthtime}`);
-		outputChannel.appendLine(``.padEnd(80, "*"));
-		outputChannel.show();
+		statusBarItem.text = text;
+		statusBarItem.show();
 	} catch (error) {
 		handleError(error);
-	}
-}
-
-function updateStatusBarAlignment(alignment: "Left" | "Right") {
-	if (alignment === "Left") {
-		statusBar = leftStatusBar;
-		rightStatusBar.hide();
-	} else {
-		statusBar = rightStatusBar;
-		leftStatusBar.hide();
-	}
-	statusBar.tooltip = "Click to view detailed file properties";
-	statusBar.command = "file-properties.viewDetail";
-	statusBar.show();
-}
-
-async function updateStatusBarText() {
-	try {
-		const stats = await getActiveFileStats();
-		const properties = formatStats(stats, configurations);
-
-		statusBar.text = properties;
-		statusBar.show();
-	} catch (error) {
-		handleError(error);
-	}
-}
-
-function updateAllConfigurations() {
-	const config = vscode.workspace.getConfiguration("file-properties");
-
-	configurations.statusBarAlignment = config.get("statusBarAlignment", defaultConfigurations.statusBarAlignment) as "Left" | "Right";
-	configurations.showPermissionsInStatusBar = config.get("showPermissionsInStatusBar", defaultConfigurations.showPermissionsInStatusBar) as boolean;
-	configurations.showSizeInStatusBar = config.get("showSizeInStatusBar", defaultConfigurations.showSizeInStatusBar) as boolean;
-	configurations.showMtimeInStatusBar = config.get("showMtimeInStatusBar", defaultConfigurations.showMtimeInStatusBar) as boolean;
-	configurations.useSiSizeUnit = config.get("useSiSizeUnit", defaultConfigurations.useSiSizeUnit) as boolean;
-	configurations.dateFormat = config.get("dateFormat", defaultConfigurations.dateFormat) as string;
-
-	updateStatusBarAlignment(configurations.statusBarAlignment);
-	updateStatusBarText();
-}
-
-function didChangeConfigurationHandler(e: vscode.ConfigurationChangeEvent) {
-	if (e.affectsConfiguration("file-properties")) {
-		updateAllConfigurations();
 	}
 }
 
 // This method is called when your extension is activated
-// Your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
-	outputChannel = vscode.window.createOutputChannel("File Properties");
+	const command = vscode.commands.registerCommand("file-properties.viewDetail", viewDetailCommandHandler);
+	context.subscriptions.push(command);
 
-	viewDetailCommand = vscode.commands.registerCommand("file-properties.viewDetail", viewDetailCommandHandler);
-	context.subscriptions.push(viewDetailCommand);
-
-	leftStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, -1024);
-	rightStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 1024);
-
-	context.subscriptions.push(statusBar);
-
-	updateAllConfigurations();
-
-	vscode.workspace.onDidChangeConfiguration(didChangeConfigurationHandler);
-	vscode.window.onDidChangeActiveTextEditor(updateStatusBarText);
+	const statusBarAlignment = configurationManager.configuration.statusBarAlignment;
+	statusBarItem = new StatusBarItem(statusBarAlignment === "Left" ? StatusBarAlignment.left : StatusBarAlignment.right);
+	statusBarItem.command = "file-properties.viewDetail";
+	context.subscriptions.push(statusBarItem);
+	configurationManager.addChangeEventListener((cfg) => {
+		const statusBarAlignment = cfg.statusBarAlignment;
+		statusBarItem.alignment = statusBarAlignment === "Left" ? StatusBarAlignment.left : StatusBarAlignment.right;
+	});
+	vscode.window.onDidChangeActiveTextEditor(updateAndShowStatusBarText);
+	updateAndShowStatusBarText();
 }
 
 // This method is called when your extension is deactivated
