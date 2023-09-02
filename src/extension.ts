@@ -115,6 +115,15 @@ function createChangeEventListener(statusBarItem: StatusBarItem) {
 	};
 }
 
+function createOnDidSaveTextDocumentListener(cb: () => any) {
+	return (document: vscode.TextDocument) => {
+		const activeDocument = vscode.window.activeTextEditor?.document;
+		if (activeDocument === document) {
+			cb();
+		}
+	};
+}
+
 // This method is called when your extension is activated
 export function activate(context: vscode.ExtensionContext) {
 	const configurator = Configurator.getInstance();
@@ -133,6 +142,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	const updateAndShowStatusBarFn = createUpdateAndShowStatusBarFn(statusBarItem, configuration);
 	disposables.push(vscode.window.onDidChangeActiveTextEditor(updateAndShowStatusBarFn));
+	disposables.push(vscode.workspace.onDidSaveTextDocument(createOnDidSaveTextDocumentListener(updateAndShowStatusBarFn)));
 
 	context.subscriptions.push(...disposables);
 
