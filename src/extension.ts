@@ -1,42 +1,11 @@
 import * as vscode from "vscode";
-import * as fs from "fs";
-import * as cfg from "./configurator";
-import * as fu from "./fsUtil";
-import * as sbi from "./statusBarItem";
-
-async function viewDetailCommandHandler() {
-	const outputChannel = vscode.window.createOutputChannel("File Properties");
-
-	try {
-		const path = getActiveFilePath();
-		const stats = await fu.lstat(path);
-
-		outputChannel.appendLine(``.padEnd(80, "*"));
-		outputChannel.appendLine(`path:      ${path}`);
-		outputChannel.appendLine(`dev:       ${stats.dev}`);
-		outputChannel.appendLine(`ino:       ${stats.ino}`);
-		outputChannel.appendLine(`mode:      ${stats.mode}`);
-		outputChannel.appendLine(`nlink:     ${stats.nlink}`);
-		outputChannel.appendLine(`uid:       ${stats.uid}`);
-		outputChannel.appendLine(`gid:       ${stats.gid}`);
-		outputChannel.appendLine(`rdev:      ${stats.rdev}`);
-		outputChannel.appendLine(`size:      ${stats.size}`);
-		outputChannel.appendLine(`blksize:   ${stats.blksize}`);
-		outputChannel.appendLine(`blocks:    ${stats.blocks}`);
-		outputChannel.appendLine(`atime:     ${stats.atime}`);
-		outputChannel.appendLine(`mtime:     ${stats.mtime}`);
-		outputChannel.appendLine(`ctime:     ${stats.ctime}`);
-		outputChannel.appendLine(`birthtime: ${stats.birthtime}`);
-		outputChannel.appendLine(``.padEnd(80, "*"));
-		outputChannel.show();
-	} catch (error) {
-		if (error instanceof Error) {
-			console.error(`[File Properties] ${error.message}`);
-		} else {
-			console.error(`[File Properties] An unknown error occurred`);
-		}
-	}
-}
+import { Stats } from "fs";
+import { basename } from "path";
+import { platform } from "process";
+import { Configurator, Configuration } from "./configurator";
+import { FileSizeUnit, lstat, getFileType, formatPermissions, formatSize, formatDate } from "./fsUtil";
+import { StatusBarItem } from "./statusBarItem";
+import { HTMLTableBuilder } from "./html";
 
 class ActiveEditorUndefinedError extends Error {
 	constructor() {
@@ -52,17 +21,17 @@ class ActiveEditorDocumentNotFileError extends Error {
 	}
 }
 
-function formatStatusBarText(stats: fs.Stats, cfg: cfg.Configuration): string {
+function formatStatusBarText(stats: Stats, cfg: Configuration): string {
 	const properties = [];
 
 	if (cfg.showPermissionsInStatusBar) {
-		properties.push(fu.formatPermissions(stats.mode));
+		properties.push(formatPermissions(stats.mode));
 	}
 	if (cfg.showSizeInStatusBar) {
-		properties.push(fu.formatSize(stats.size, cfg.useSiSizeUnit ? fu.FileSizeUnit.si : fu.FileSizeUnit.iec));
+		properties.push(formatSize(stats.size, cfg.useSiSizeUnit ? FileSizeUnit.si : FileSizeUnit.iec));
 	}
 	if (cfg.showMTimeInStatusBar) {
-		properties.push(fu.formatDate(stats.mtime, cfg.dateFormat));
+		properties.push(formatDate(stats.mtime, cfg.dateFormat));
 	}
 
 	return `[${properties.join(" | ")}]`;
@@ -80,15 +49,56 @@ function getActiveFilePath(): string {
 	return uri.fsPath;
 }
 
-function createUpdateAndShowStatusBarFn(statusBarItem: sbi.StatusBarItem, cfg: cfg.Configuration) {
+function createViewDetailsHandler(cfg: Configuration) {
 	return async () => {
 		try {
 			const path = getActiveFilePath();
-			const stats = await fu.lstat(path);
+			const stats = await lstat(path);
+			const name = basename(path);
+
+			const panel = vscode.window.createWebviewPanel("FileProperties", `Properties of ${name}`, vscode.ViewColumn.Beside, {});
+			const htmlTable = new HTMLTableBuilder(["Property", "Value"]);
+
+			htmlTable.addRow(["Name", `${name} `]);
+			htmlTable.addRow(["Path", `${path}`]);
+			htmlTable.addRow(["Type", `${getFileType(stats)}`]);
+			htmlTable.addRow(["Ownership", `UID=${stats.uid}, GID=${stats.gid}`]);
+			htmlTable.addRow(["Permissions", `<b>${formatPermissions(stats.mode)}</b> (oct: ${stats.mode.toString(8)})`]);
+			htmlTable.addRow(["Size", `<b>${formatSize(stats.size, cfg.useSiSizeUnit ? FileSizeUnit.si : FileSizeUnit.iec)}</b> (${stats.size} B)`]);
+
+			htmlTable.addRow(["ID of containing device", `${stats.dev}`]);
+			htmlTable.addRow([platform === "win32" ? "File Index" : "I-node Number", `${stats.ino}`]);
+			htmlTable.addRow(["Hardware Link Count", `${stats.nlink}`]);
+
+			htmlTable.addRow(["Blocks Allocated", `<b>${stats.blocks}</b> (* 512 = ${stats.blocks * 512} B)`]);
+			htmlTable.addRow(["Preferred I/O Block Size", `${stats.blksize}`]);
+			htmlTable.addRow(["Type of device", `${stats.rdev}`]);
+
+			htmlTable.addRow(["Last Accessed Date", `${formatDate(stats.atime, cfg.dateFormat)}`]);
+			htmlTable.addRow(["Last Modified Date", `${formatDate(stats.mtime, cfg.dateFormat)}`]);
+			htmlTable.addRow(["Last Changed Date", `${formatDate(stats.ctime, cfg.dateFormat)}`]);
+			htmlTable.addRow(["Creation Date", `${formatDate(stats.birthtime, cfg.dateFormat)}`]);
+
+			panel.webview.html = htmlTable.build();
+		} catch (error) {
+			if (error instanceof Error) {
+				console.error(`[File Properties] ${error.message}`);
+			} else {
+				console.error(`[File Properties] An unknown error occurred`);
+			}
+		}
+	};
+}
+
+function createUpdateAndShowStatusBarFn(statusBarItem: StatusBarItem, cfg: Configuration) {
+	return async () => {
+		try {
+			const path = getActiveFilePath();
+			const stats = await lstat(path);
 			statusBarItem.text = formatStatusBarText(stats, cfg);;
 			statusBarItem.show();
 		} catch (error) {
-			if (error instanceof ActiveEditorUndefinedError || ActiveEditorDocumentNotFileError) {
+			if (error instanceof ActiveEditorUndefinedError || error instanceof ActiveEditorDocumentNotFileError) {
 				statusBarItem.hide();
 			} else if (error instanceof Error) {
 				console.error(`[File Properties] ${error.message}`);
@@ -99,24 +109,24 @@ function createUpdateAndShowStatusBarFn(statusBarItem: sbi.StatusBarItem, cfg: c
 	};
 }
 
-function createChangeEventListener(statusBarItem: sbi.StatusBarItem) {
-	return (cfg: cfg.Configuration) => {
+function createChangeEventListener(statusBarItem: StatusBarItem) {
+	return (cfg: Configuration) => {
 		statusBarItem.alignment = cfg.statusBarAlignment;
 	};
 }
 
 // This method is called when your extension is activated
 export function activate(context: vscode.ExtensionContext) {
-	const configurator = cfg.Configurator.getInstance();
+	const configurator = Configurator.getInstance();
 	const configuration = configurator.configuration;
 
 	const disposables: vscode.Disposable[] = [];
 
-	disposables.push(vscode.commands.registerCommand("file-properties.viewDetail", viewDetailCommandHandler))
+	disposables.push(vscode.commands.registerCommand("file-properties.viewDetails", createViewDetailsHandler(configuration)));
 
-	const statusBarItem = new sbi.StatusBarItem(configuration.statusBarAlignment, 1024);
-	statusBarItem.tooltip = "Click to view detailed file properties";
-	statusBarItem.command = "file-properties.viewDetail";
+	const statusBarItem = new StatusBarItem(configuration.statusBarAlignment, 1024);
+	statusBarItem.tooltip = "Click to view more detailed file properties";
+	statusBarItem.command = "file-properties.viewDetails";
 	disposables.push(statusBarItem);
 
 	configurator.addChangeEventListener(createChangeEventListener(statusBarItem));
