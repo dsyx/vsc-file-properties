@@ -1,11 +1,13 @@
 # File Properties
 
-A VSCode extension for conveniently displaying file properties.
+A VSCode extension for viewing file properties conveniently.
 
 ## Features
 
-- Show active file properties in status bar, such as permissions, size, and modification time.
-- Click the status entry to view detailed properties of the file.
+- Show file properties in status bar.
+- Click on the status bar item to view detailed file properties.
+- The file properties shown in the status bar can be customized.
+- The format of displaying file properties can be customized.
 
 ## Requirements
 
