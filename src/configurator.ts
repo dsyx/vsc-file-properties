@@ -1,23 +1,61 @@
 import * as vscode from "vscode";
+import * as os from "os";
+import { FileSizeUnit } from "./fsUtil";
 
 const CONFIGURATION_SECTION = "file-properties";
 
-const DEFAULT_CONFIGURATION: Configuration = {
-    statusBarAlignment: vscode.StatusBarAlignment.Right,
-    showPermissionsInStatusBar: true,
-    showSizeInStatusBar: true,
-    showMTimeInStatusBar: true,
-    useSiSizeUnit: false,
-    dateFormat: "yyyy-MM-dd HH:mm:ss",
-};
+function getStatusBarAlignmentConfigOrDefault(config: vscode.WorkspaceConfiguration): vscode.StatusBarAlignment {
+    return config.get<string>("statusBarAlignment") === "left" ? vscode.StatusBarAlignment.Left : vscode.StatusBarAlignment.Right;
+}
+
+function getShowPermissionsInStatusBarConfigOrDefault(config: vscode.WorkspaceConfiguration): boolean {
+    switch (os.platform()) {
+        case "darwin":
+            return config.get<boolean>("showPermissionsInStatusBar.darwin") === false ? false : true;
+        case "linux":
+            return config.get<boolean>("showPermissionsInStatusBar.linux") === false ? false : true;
+        case "win32":
+            return config.get<boolean>("showPermissionsInStatusBar.win32") === true ? true : false;
+        default:
+            return false;
+    }
+}
+
+function getShowSizeInStatusBarConfigOrDefault(config: vscode.WorkspaceConfiguration): boolean {
+    return config.get<boolean>("showSizeInStatusBar") === false ? false : true;
+}
+
+function getShowATimeInStatusBarConfigOrDefault(config: vscode.WorkspaceConfiguration): boolean {
+    return config.get<boolean>("showATimeInStatusBar") === true ? true : false;
+}
+
+function getShowMTimeInStatusBarConfigOrDefault(config: vscode.WorkspaceConfiguration): boolean {
+    return config.get<boolean>("showMTimeInStatusBar") === false ? false : true;
+}
+
+function getShowCTimeInStatusBarConfigOrDefault(config: vscode.WorkspaceConfiguration): boolean {
+    return config.get<boolean>("showCTimeInStatusBar") === true ? true : false;
+}
+
+function getSizeUnitConfigOrDefault(config: vscode.WorkspaceConfiguration): FileSizeUnit {
+    return config.get<string>("sizeUnit") === FileSizeUnit.si ? FileSizeUnit.si : FileSizeUnit.iec;
+}
+
+function getTimeFormatConfigOrDefault(config: vscode.WorkspaceConfiguration): string {
+    const format = config.get<string>("timeFormat");
+    return format ? format : "YYYY-MM-DD HH:mm:ss";
+}
+
 
 export type Configuration = {
     statusBarAlignment: vscode.StatusBarAlignment;
     showPermissionsInStatusBar: boolean;
     showSizeInStatusBar: boolean;
+    showATimeInStatusBar: boolean;
     showMTimeInStatusBar: boolean;
-    useSiSizeUnit: boolean;
-    dateFormat: string;
+    showCTimeInStatusBar: boolean;
+    sizeUnit: FileSizeUnit;
+    timeFormat: string;
 };
 
 export type ChangeEventListener = (cfg: Configuration) => any;
@@ -40,23 +78,33 @@ export class Configurator {
 
     public updateConfiguration(): void {
         const config = vscode.workspace.getConfiguration(CONFIGURATION_SECTION);
-
-        const statusBarAlignment = config.get<string>("statusBarAlignment");
         this.configuration = {
-            statusBarAlignment: statusBarAlignment === "Left" ? vscode.StatusBarAlignment.Left : vscode.StatusBarAlignment.Right,
-            showPermissionsInStatusBar: config.get("showPermissionsInStatusBar", DEFAULT_CONFIGURATION.showPermissionsInStatusBar),
-            showSizeInStatusBar: config.get("showSizeInStatusBar", DEFAULT_CONFIGURATION.showSizeInStatusBar),
-            showMTimeInStatusBar: config.get("showMTimeInStatusBar", DEFAULT_CONFIGURATION.showMTimeInStatusBar),
-            useSiSizeUnit: config.get("useSiSizeUnit", DEFAULT_CONFIGURATION.useSiSizeUnit),
-            dateFormat: config.get("dateFormat", DEFAULT_CONFIGURATION.dateFormat),
+            statusBarAlignment: getStatusBarAlignmentConfigOrDefault(config),
+            showPermissionsInStatusBar: getShowPermissionsInStatusBarConfigOrDefault(config),
+            showSizeInStatusBar: getShowSizeInStatusBarConfigOrDefault(config),
+            showATimeInStatusBar: getShowATimeInStatusBarConfigOrDefault(config),
+            showMTimeInStatusBar: getShowMTimeInStatusBarConfigOrDefault(config),
+            showCTimeInStatusBar: getShowCTimeInStatusBarConfigOrDefault(config),
+            sizeUnit: getSizeUnitConfigOrDefault(config),
+            timeFormat: getTimeFormatConfigOrDefault(config),
         };
 
         this.notifyChangeEventListeners();
     }
 
     private constructor() {
+        const config = vscode.workspace.getConfiguration(CONFIGURATION_SECTION);
+        this._configuration = {
+            statusBarAlignment: getStatusBarAlignmentConfigOrDefault(config),
+            showPermissionsInStatusBar: getShowPermissionsInStatusBarConfigOrDefault(config),
+            showSizeInStatusBar: getShowSizeInStatusBarConfigOrDefault(config),
+            showATimeInStatusBar: getShowATimeInStatusBarConfigOrDefault(config),
+            showMTimeInStatusBar: getShowMTimeInStatusBarConfigOrDefault(config),
+            showCTimeInStatusBar: getShowCTimeInStatusBarConfigOrDefault(config),
+            sizeUnit: getSizeUnitConfigOrDefault(config),
+            timeFormat: getTimeFormatConfigOrDefault(config),
+        };
         this.changeEventListeners = new Set<ChangeEventListener>();
-        this._configuration = { ...DEFAULT_CONFIGURATION };
 
         vscode.workspace.onDidChangeConfiguration(this.changeConfigurationEventListener);
         this.updateConfiguration();
@@ -66,9 +114,11 @@ export class Configurator {
         this._configuration.statusBarAlignment = cfg.statusBarAlignment;
         this._configuration.showPermissionsInStatusBar = cfg.showPermissionsInStatusBar;
         this._configuration.showSizeInStatusBar = cfg.showSizeInStatusBar;
+        this._configuration.showATimeInStatusBar = cfg.showATimeInStatusBar;
         this._configuration.showMTimeInStatusBar = cfg.showMTimeInStatusBar;
-        this._configuration.useSiSizeUnit = cfg.useSiSizeUnit;
-        this._configuration.dateFormat = cfg.dateFormat;
+        this._configuration.showCTimeInStatusBar = cfg.showCTimeInStatusBar;
+        this._configuration.sizeUnit = cfg.sizeUnit;
+        this._configuration.timeFormat = cfg.timeFormat;
     }
 
     private changeConfigurationEventListener = (e: vscode.ConfigurationChangeEvent): void => {

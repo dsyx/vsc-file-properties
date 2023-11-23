@@ -1,6 +1,6 @@
 import * as fs from "fs";
 import * as util from "util";
-import { DateTime } from "luxon";
+import * as dayjs from "dayjs";
 
 const FILE_SIZE_UNITS: Record<FileSizeUnit, { units: string[]; step: number }> = {
     si: {
@@ -80,5 +80,5 @@ export function formatSize(size: number, unit: FileSizeUnit): string {
 }
 
 export function formatDate(date: Date, format: string): string {
-    return DateTime.fromJSDate(date).toFormat(format);
+    return dayjs(date).format(format);
 }

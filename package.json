@@ -3,12 +3,12 @@
   "displayName": "File Properties",
   "description": "A VSCode extension for viewing file properties conveniently.",
   "icon": "resources/icons/logo.png",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "publisher": "dsyx",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/dsyx/file-properties.git"
+    "url": "https://github.com/dsyx/vsc-file-properties.git"
   },
   "engines": {
     "vscode": "^1.64.0"
@@ -28,12 +28,26 @@
       "properties": {
         "file-properties.statusBarAlignment": {
           "type": "string",
-          "default": "Right",
-          "description": "Status bar alignment, 'Left' or 'Right'."
+          "enum": [
+            "left",
+            "right"
+          ],
+          "default": "right",
+          "description": "Status bar alignment, 'left' or 'right'."
         },
-        "file-properties.showPermissionsInStatusBar": {
+        "file-properties.showPermissionsInStatusBar.darwin": {
           "type": "boolean",
           "default": true,
+          "description": "Show file permissions in status bar."
+        },
+        "file-properties.showPermissionsInStatusBar.linux": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show file permissions in status bar."
+        },
+        "file-properties.showPermissionsInStatusBar.win32": {
+          "type": "boolean",
+          "default": false,
           "description": "Show file permissions in status bar."
         },
         "file-properties.showSizeInStatusBar": {
@@ -41,20 +55,34 @@
           "default": true,
           "description": "Show file size in status bar."
         },
+        "file-properties.showATimeInStatusBar": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show the last access time of file in status bar."
+        },
         "file-properties.showMTimeInStatusBar": {
           "type": "boolean",
           "default": true,
-          "description": "Show file last modified date in status bar."
+          "description": "Show the last modification time of file in status bar."
         },
-        "file-properties.useSiSizeUnit": {
+        "file-properties.showCTimeInStatusBar": {
           "type": "boolean",
           "default": false,
-          "description": "Use the size unit defined in SI (1 KB = 1000 B) instead of the definition in the IEC standard (1 KiB = 1024 B)."
+          "description": "Show the last metadata change time of file in status bar."
         },
-        "file-properties.dateFormat": {
+        "file-properties.sizeUnit": {
           "type": "string",
-          "default": "yyyy-MM-dd HH:mm:ss",
-          "description": "For the format of all dates, see: https://moment.github.io/luxon/#/formatting?id=table-of-tokens."
+          "enum": [
+            "si",
+            "iec"
+          ],
+          "default": "iec",
+          "description": "Unit for file size. 'si' (International System of Units, 1KB = 1000B) or 'iec' (International Electrotechnical Commission, 1KiB = 1024B)."
+        },
+        "file-properties.timeFormat": {
+          "type": "string",
+          "default": "YYYY-MM-DD HH:mm:ss",
+          "description": "Format of time. See: https://day.js.org/docs/en/parse/string-format."
         }
       }
     }
@@ -88,6 +116,6 @@
     "webpack-cli": "^5.1.1"
   },
   "dependencies": {
-    "luxon": "^3.4.2"
+    "dayjs": "^1.11.10"
   }
 }
